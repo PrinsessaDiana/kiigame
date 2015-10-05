@@ -10,7 +10,7 @@ var input_layer = stage.get('#input_layer')[0];
 var number_selected = false;
 
 // Default player number
-input_text.setText(input_text.getText());
+input_text.setText(texts_json['input_text']['text']);
 
 // Dirty removing of default event handler to allow using jersey input
 stage.get('#start_game')[0].eventListeners.click = [];
@@ -33,7 +33,7 @@ stage.get('#start_game')[0].on('tap click', function(event) {
 stage.get('#start')[0].on('tap click', function(event) {
 	event = event.target;
 
-	setMonologue(findMonologue(panic, 'text'));
+	setMonologue(findMonologue('character_panic', 'text'));
 	setTimeout(function() {
 		idle_1.hide();
 		panic.show();
@@ -158,8 +158,8 @@ input_layer.on('tap click', function(event) {
 		// OK
 	} else if (selected == 'OK' && input_text.getText().length > 0) {
 		stage.get('#jersey_number')[0].setText(input_text.getText());
-		stage.get('#jersey_number')[0].setAttr('examine', input_text.getAttr('wikistart') + input_text.getText() + input_text.getAttr('wikiend') + legends_json[parseInt(input_text.getText()) - 1].player + ".\n\n" + legends_json[parseInt(input_text.getText()) - 1].wikipedia);
-		stage.get('#icehockey_jersey')[0].setAttr('examine', input_text.getAttr('wikistart') + input_text.getText() + input_text.getAttr('wikiend') + legends_json[parseInt(input_text.getText()) - 1].player + ".\n\n" + legends_json[parseInt(input_text.getText()) - 1].wikipedia);
+		texts_json['jersey_number']['examine'] = texts_json['input_text']['wikistart'] + input_text.getText() + texts_json['input_text']['wikiend'] + legends_json[parseInt(input_text.getText()) - 1].player + ".\n\n" + legends_json[parseInt(input_text.getText()) - 1].wikipedia;
+		texts_json['icehockey_jersey']['examine'] = texts_json['input_text']['wikistart'] + input_text.getText() + texts_json['input_text']['wikiend'] + legends_json[parseInt(input_text.getText()) - 1].player + ".\n\n" + legends_json[parseInt(input_text.getText()) - 1].wikipedia;
 		input_layer.hide();
 
 		play_sequence("intro");
@@ -194,6 +194,10 @@ input_layer.on('tap click', function(event) {
 });
 
 //Developer feature - shortcut menu from the empty menu button for testing purposes
+start_layer.on('mouseup touchend', function(event) {
+	interact(event);
+});
+
 stage.get('#start_empty')[0].on('tap click', function(event) {
 	event = event.target;
 	var clone;

@@ -8,27 +8,6 @@ var texts_json = JSON.parse(getJSON('texts.json'));
 //Create stage and everything in it from json
 var stage = Kinetic.Node.create(images_json_text, 'container');
 
-// Add texts to objects in stage so that they can be dynamically changed,
-// for example changing the jersey text in Lätkäzombit according to the
-// player number chosen.
-for (var key in texts_json)
-{
-    if (texts_json.hasOwnProperty(key))
-    {
-        var object = stage.get('#' + key)[0];
-        if (object) // e.g. "default" in texts.json is not a proper object
-        {
-            for (var subkey in texts_json[key])
-            {
-                if (texts_json[key].hasOwnProperty(subkey))
-                {
-                    object.setAttr(subkey, texts_json[key][subkey]);
-                }
-            }
-        }
-    }
-}
-
 //Scale stage to window size
 //stage.setWidth(window.innerWidth);
 //stage.setHeight(window.innerHeight);
@@ -61,13 +40,6 @@ stage.get("#inventory_bar")[0].width(stage.width());
 
 //Make a json object from the json string
 var images_json = stage.toObject();
-
-//Variable for saving the current room (for changing backgrounds and object layers)
-// TODO: Determine these other way
-var start_layer = stage.get("#start_layer")[0];
-var current_background = 'start_layer';
-var game_start_layer;
-var current_layer = start_layer;
 
 //The amount of rewards found
 var rewards = 0;
@@ -172,6 +144,61 @@ var idle_2_animation = new Kinetic.Tween({
 	}
 });
 
+//Creating all image objects from json file based on their attributes
+for (var i = 0; i < images_json.children.length; i++) {
+	for (var j = 0; j < images_json.children[i].children.length; j++) {
+		if (images_json.children[i].children[j].className == 'Image') {
+			createObject(images_json.children[i].children[j].attrs);
+			object_attrs =images_json.children[i].children[j].attrs;
+
+            // Disable unneeded transformations. Pickable items may be scaled,
+            // for other things the position may change. Untested optimization.
+            if (object_attrs.category != 'item')
+                stage.get('#' + object_attrs.id)[0].transformsEnabled('position');
+
+			if (object_attrs.animated === true)
+				create_animation(stage.get('#' + object_attrs.id)[0]);
+		}
+	}
+	if (images_json.children[i].attrs.category == 'menu')
+		create_menu_action(images_json.children[i]);
+}
+
+//Variable for saving the current room (for changing backgrounds and object layers)
+var current_layer;
+var current_background;
+var game_start_layer;
+
+stage.getChildren().each(function(o) {
+    if (o.getAttr('category') === 'room' && o.getAttr('start') === true)
+	    game_start_layer = o;
+});
+
+var start_layer = stage.get("#start_layer")[0]; // TODO: get rid of start_layer
+
+// The optional start layer has optional splash screen and optional start menu.
+// TODO: Delay transition to game_start_layer?
+if (stage.get("#start_layer")[0] != null) {
+    current_background = 'start_layer';
+    current_layer = start_layer;
+    if (stage.get('#splash_screen')[0] != null) {
+        stage.get('#splash_screen')[0].on('tap click', function(event) {
+            stage.get('#splash_screen')[0].hide();
+            if (stage.get('#start_layer_menu')[0] != null)
+                display_start_menu();
+            else
+                do_transition(game_start_layer.id());
+        });
+    } else { // no splash screen
+        if (stage.get('#start_layer_menu')[0] != null)
+            display_start_menu();
+        else // start layer without splash or menu?!
+            do_transition(game_start_layer.id());
+    }
+} else { // no start layer
+    do_transition(game_start_layer.id());
+}
+
 function create_animation (object) {
 	var attrs = object.getAttr("animation");
 	var animation = new Kinetic.Tween({
@@ -191,26 +218,6 @@ function create_animation (object) {
 	});
 
 	animated_objects.push(animation);
-}
-
-//Creating all image objects from json file based on their attributes
-for (var i = 0; i < images_json.children.length; i++) {
-	for (var j = 0; j < images_json.children[i].children.length; j++) {
-		if (images_json.children[i].children[j].className == 'Image') {
-			createObject(images_json.children[i].children[j].attrs);
-			object_attrs =images_json.children[i].children[j].attrs;
-
-            // Disable unneeded transformations. Pickable items may be scaled,
-            // for other things the position may change. Untested optimization.
-            if (object_attrs.category != 'item')
-                stage.get('#' + object_attrs.id)[0].transformsEnabled('position');
-
-			if (object_attrs.animated === true)
-				create_animation(stage.get('#' + object_attrs.id)[0]);
-		}
-	}
-	if (images_json.children[i].attrs.category == 'menu')
-		create_menu_action(images_json.children[i]);
 }
 
 /*
@@ -246,10 +253,10 @@ function create_menu_action(menu_image) {
 		}
 		else if (item_action == "credits") {
 			item.on('tap click', function(event) {
-				event = event.target;
-				setMonologue(findMonologue(event));
+				setMonologue(findMonologue(event.target.id()));
 			});
 		}
+        // TODO: Return to main menu after end of game.
 		else if (item_action == "main_menu") {
 			item.on('tap click', function(event) {
 				stage.get('#end_texts')[0].hide();
@@ -296,22 +303,12 @@ window.onload = function() {
 			o.on('mouseup touchend', function(event) {
 				interact(event);
 			});
-
-			// Current layer for hit region purposes in different rooms
-			if (o.getAttr('start') === true) {
-				game_start_layer = o;
-			}
 		}
 	});
 
 	stage.draw();
 	idle_1_animation.play();
 };
-
-stage.get('#beginning')[0].on('tap click', function(event) {
-	stage.get('#beginning')[0].hide();
-	display_start_menu();
-});
 
 // Display the start menu including "click" to proceed image
 function display_start_menu() {
@@ -547,14 +544,14 @@ function do_transition(layerId, slow_fade, comingFrom) {
 	
 	fade_layer.show();
 	fade.play();
-	
-	var textId = current_layer.getAttr('id');
-	
+
 	setTimeout(function() {
 		stop_music();
 		fade.reverse();
-		
-		current_layer.hide();
+
+        if (current_layer != null) // may be null if no start_layer is defined
+            current_layer.hide();
+
 		current_layer = stage.get("#"+layerId)[0];
 		
 		//Play the animations of the room
@@ -577,17 +574,12 @@ function do_transition(layerId, slow_fade, comingFrom) {
 			fade_layer.moveDown();
 			play_music(current_layer.id());
 			if (comingFrom)
-				setMonologue(findMonologue(stage.get('#' + comingFrom)[0]));
+				setMonologue(findMonologue(comingFrom));
 		}, fade_time);
 	}, fade_time);
 }
 
 //Mouse up and touch end events (picking up items from the environment
-//Start layer for the shortcut developer menu
-start_layer.on('mouseup touchend', function(event) {
-	interact(event);
-});
-
 //Mouse click and tap events (examine items in the inventory)
 inventory_layer.on('click tap', function(event) {
 	interact(event);
@@ -620,7 +612,7 @@ stage.on('dragmove', function(event) {
 						target = object;
 					}
 					break;
-					// No target, move on
+                // No target, move on
 				} else {
 					target = null;
 				}
@@ -682,7 +674,7 @@ stage.on('dragmove', function(event) {
 			
 			// Don't cause a mass of errors if no text found
 			try {
-				interaction_text.text(target.getAttr('name'));
+				interaction_text.text(texts_json[target.id()].name);
 			}
 			catch (e) {
 			}
@@ -748,7 +740,7 @@ stage.get('Image').on('dragend', function(event) {
 		// Can dragged object unlock locked container?
 		if (object.locked === true && object.key == dragged_item.id()) {
 			object.locked = false;
-            destroyObject(stage.get('#' + objects_json[target.getAttr('object_name')]['locked_image']));
+            removeObject(stage.get('#' + objects_json[target.getAttr('object_name')]['locked_image']));
 
 			if (object.state == "empty")
 				unlocked = "empty_image";
@@ -762,15 +754,14 @@ stage.get('Image').on('dragend', function(event) {
 			object.state = 'full';
 
 			if (object.in == dragged_item.id()) {
-				stage.get('#' + objects_json[target.getAttr('object_name')]['empty_image'])[0].hide();
+				removeObject(stage.get('#' + objects_json[target.getAttr('object_name')]['empty_image']));
                 addObject(stage.get('#' + objects_json[target.getAttr('object_name')]['full_image']));
 
 				// Remove dragged item
 				destroy = true;
-				current_layer.draw();
 			}
 		}
-		setMonologue(findMonologue(dragged_item, target.id()));
+		setMonologue(findMonologue(dragged_item.id(), target.id()));
 	}
 	// Unlock a door
 	else if (target != null && target.getAttr('category') == 'door') {
@@ -780,17 +771,17 @@ stage.get('Image').on('dragend', function(event) {
 			object.state = 'open';
 			object.locked = false;
 
-            destroyObject(stage.get('#' + object.locked_image));
+            removeObject(stage.get('#' + object.locked_image));
             addObject(stage.get('#' + object.open_image));
 		}
 
-		setMonologue(findMonologue(dragged_item, target.id()));
+		setMonologue(findMonologue(dragged_item.id(), target.id()));
 	}
 	// Unblock an obstacle
 	else if (target != null && target.getAttr('category') == 'obstacle') {
 		var object = objects_json[target.getAttr('object_name')];
 
-		setMonologue(findMonologue(dragged_item, target.id()));
+		setMonologue(findMonologue(dragged_item.id(), target.id()));
 
 		if (object.blocking === true && object.trigger == dragged_item.id()) {
 			var blocked_object = objects_json[object.target];
@@ -799,15 +790,15 @@ stage.get('Image').on('dragend', function(event) {
 			blocked_object.blocked = false;
 
 			// TODO: What about other objects than door?
-            destroyObject(stage.get('#' + object.locked_image));
+            removeObject(stage.get('#' + object.locked_image));
             addObject(stage.get('#' + blocked_object.closed_image));
 
-            destroyObject(target);
+            removeObject(target);
 		}
 	}
 	// Use item on object
 	else if (target != null && object && object.outcome != undefined && target.getAttr('category') == 'object') {
-		setMonologue(findMonologue(dragged_item, target.id()));
+		setMonologue(findMonologue(dragged_item.id(), target.id()));
 
 		if (objects_json[dragged_item.id()].trigger == target.id()) {
             addObject(stage.get('#' + objects_json[dragged_item.id()].outcome));
@@ -818,12 +809,12 @@ stage.get('Image').on('dragend', function(event) {
 				destroy = true;
 
             // The object is destroyed if it is the target of item's use.
-            destroyObject(target);
+            removeObject(target);
 		}
 	}
 	// Use item on item
 	else if (target != null && object && object.outcome != undefined && target.getAttr('category') == 'usable') {
-		setMonologue(findMonologue(dragged_item, target.id()));
+		setMonologue(findMonologue(dragged_item.id(), target.id()));
 		if (objects_json[dragged_item.id()].trigger == target.id()) {
 			inventoryAdd(stage.get('#' + objects_json[dragged_item.id()].outcome)[0]);
 			destroy = true;
@@ -832,7 +823,7 @@ stage.get('Image').on('dragend', function(event) {
 	}
 	// Default for all others
 	else {
-		setMonologue(findMonologue(dragged_item, target.id()));
+		setMonologue(findMonologue(dragged_item.id(), target.id()));
 	}
 	// Check if dragged item's destroyed, if not, add it to inventory
 	if (destroy == false) {
@@ -887,32 +878,30 @@ function interact(event) {
 		
 	// Pick up an item
 	else if (target_category == 'item') {
-		setMonologue(findMonologue(target, 'pickup'));
+		setMonologue(findMonologue(target.id(), 'pickup'));
 		if (target.getAttr('src2') != undefined) { // different image on floor
 			inventoryAdd(stage.get('#' + target.getAttr('src2'))[0]);
-            destroyObject(target);
+            removeObject(target);
 		} else {
 			inventoryAdd(target);
 		}
-		current_layer.draw();
 
 		// To prevent multiple events happening at the same time
 		event.cancelBubble = true;
 		// Pick up a secret item
 	} else if (target_category == 'secret') {
-		setMonologue(findMonologue(target, 'pickup'));
+		setMonologue(findMonologue(target.id(), 'pickup'));
 		var rewardID = target.getAttr('reward');
 		inventoryAdd(stage.get('#'+rewardID)[0]);
 		rewards++;
-        destroyObject(target);
-		current_layer.draw();
+        removeObject(target);
 
 		// To prevent multiple events happening at the same time
 		event.cancelBubble = true;
 	}
 	// Print examine texts for items, rewards and objects
 	else if (target_category == 'object' || target_category == 'usable' || target_category == 'reward' || target_category == 'obstacle') {
-		setMonologue(findMonologue(target));
+		setMonologue(findMonologue(target.id()));
 	}
 	// Take an item out of a container
 	else if (target_category == 'container') {
@@ -922,28 +911,26 @@ function interact(event) {
 			if (object.state == 'full') {
 				object.state = 'empty';
 
-				stage.get('#' + objects_json[target.getAttr('object_name')]['full_image'])[0].hide();
+				removeObject(stage.get('#' + objects_json[target.getAttr('object_name')]['full_image']));
                 addObject(stage.get('#' + objects_json[target.getAttr('object_name')]['empty_image']));
 
 				// Show and add the added inventory item
 				var new_item = stage.get('#' + object.out)[0];
 				inventoryAdd(new_item);
-
-				current_layer.draw();
 			}
 		}
 
-		setMonologue(findMonologue(target));
+		setMonologue(findMonologue(target.id()));
 	}
 	// Open a door or do a transition
 	else if (target_category == 'door') {
 		var object = objects_json[target.getAttr('object_name')];
 
 		if (object.blocked === true)
-			setMonologue(findMonologue(target));
+			setMonologue(findMonologue(target.id()));
 			
 		else if (object.state == 'closed') {
-			setMonologue(findMonologue(target));
+			setMonologue(findMonologue(target.id()));
 			if (object.locked === true) {
 				object.state = 'locked';
                 addObject(stage.get('#' + object.locked_image));
@@ -952,15 +939,14 @@ function interact(event) {
 				object.state = 'open';
                 addObject(stage.get('#' + object.open_image));
 			}
-            destroyObject(target);
-			current_layer.draw();
+            removeObject(target);
 		}
         else if (object.state == 'locked')
-            setMonologue(findMonologue(target));
+            setMonologue(findMonologue(target.id()));
 		else if (object.state == 'open') {
 			do_transition(object.transition);
 			setTimeout(function() {
-				setMonologue(findMonologue(target));
+				setMonologue(findMonologue(target.id()));
 			}, 700);
 		}
 	}
@@ -980,18 +966,19 @@ function interact(event) {
 }
 
 /// Add an object to the stage. Currently, this means setting its visibility
-/// to true.
+/// to true. // TODO: Add animations & related parts.
 /// @param The object to be added.
 function addObject(object) {
     object.clearCache();
     object.show();
     object.cache();
+    current_layer.draw();
 }
 
-/// Destroy an object from stage. Called after interactions that remove objects.
-/// The destroyed object is set to null in case it's the target variable.
+/// Remove an object from stage. Called after interactions that remove objects.
+/// The removed object is hidden. Handles animations and multipart objects.
 /// @param object The object to be destroyed.
-function destroyObject(object) {
+function removeObject(object) {
     // Remove the object from the list of animated thingies, if it's there.
     removeAnimation(object.id());
 
@@ -1007,12 +994,12 @@ function destroyObject(object) {
 	    for (var i in related) {
             var related_part = stage.get("#" + related[i])[0];
             removeAnimation(related_part.id());
-            related_part.hide(); // TODO: Don't hide, destroy.
+            related_part.hide();
          }
 	}
 
-    object.destroy();
-    object = null; // in case it's "target"
+    object.hide();
+    current_layer.draw();
 }
 
 /// Remove an object from the list of animated objects.
@@ -1079,28 +1066,28 @@ function play_ending(ending) {
 
 }
 
-/// Find monologue text in object. If a text is not found from the object by
-/// the parameter, return the defaul text for the object (if it exists), or
-/// the master default text (looked up from JSON).
-/// @param object The object in stage where text is looked up from.
+/// Find monologue text in object. If a text is not found from texts_json by
+/// the parameter, return the default text for the object (if it exists), or
+/// the master default text.
+/// @param object_id The id of the object which's texts are looked up.
 /// @param key The key to look up the text with. If null, set to 'examine' by
 ///            default. Otherwise usually the name of the other object in
 ///            item-object interactions.
 /// @return The text found, or the default text.
-function findMonologue(object, key) {
+function findMonologue(object_id, key) {
 	if (key == null)
 		key = 'examine';
 
-    var text = object.getAttr(key);
+    var text = texts_json[object_id][key];
 
 	// If no text found, use default text
 	if (!text || text.length == 0) {
 		// Item's own default
-		console.warn("No text " + key + " found for " + object.getAttr('id'));
-		text = object.getAttr('default');
+		console.warn("No text " + key + " found for " + object_id);
+		text = texts_json[object_id]['default'];
 		if (!text) {
 			// Master default
-			console.warn("Default text not found for " + object.getAttr('id') + ". Using master default.");
+			console.warn("Default text not found for " + object_id + ". Using master default.");
 			try {
                 text = texts_json["default"]["examine"];
             } catch (e) {
@@ -1202,6 +1189,7 @@ function inventoryAdd(item) {
     if (inventory_list.indexOf(item) > inventory_index + inventory_max - 1)
         inventory_index = Math.max(inventory_list.indexOf(item) + 1 - inventory_max, 0);
 
+    current_layer.draw();
 	redrawInventory();
 }
 
